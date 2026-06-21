@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>⚡ SNIPER V6.4.0 - LOG REPAIR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #000; color: #e4e4e7; font-family: 'JetBrains Mono', monospace; }
+        .panel { background: #0a0a0a; border-bottom: 2px solid #1a1a1a; position: sticky; top: 0; z-index: 100; }
+        .card { background: #09090b; border: 1px solid #18181b; min-height: 140px; }
+        
+        /* 待機呼吸燈：MAGMA 蓄勢感 */
+        .card-idle { animation: breath 4s infinite ease-in-out; }
+        @keyframes breath { 
+            0%, 100% { border-color: #1a1a1a; box-shadow: 0 0 0px rgba(0,0,0,0); } 
+            50% { border-color: #166534; box-shadow: 0 0 10px rgba(22,101,52,0.2); } 
+        }
+
+        .sniper-trigger { border: 2px solid #ef4444 !important; background: #450a0a !important; animation: blink-red 0.6s infinite !important; }
+        @keyframes blink-red { 0%, 100% { box-shadow: 0 0 20px #7f1d1d; } 50% { box-shadow: 0 0 5px #7f1d1d; } }
+
+        .hunter-trigger { border: 2px solid #facc15 !important; background: #422006 !important; animation: blink-yellow 1s infinite !important; }
+        @keyframes blink-yellow { 0%, 100% { box-shadow: 0 0 15px #713f12; } 50% { box-shadow: 0 0 5px #713f12; } }
+
+        .fading { opacity: 0.5; filter: grayscale(0.7); animation: none !important; }
+        
+        /* 滑桿樣式固定 */
+        input[type=range] { -webkit-appearance: none; background: #27272a; height: 8px; border-radius: 4px; width: 100%; margin-top: 10px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%; background: #fff; border: 2px solid #3b82f6; cursor: pointer; }
+        .active-fuel { background: #a855f7 !important; color: white !important; box-shadow: 0 0 15px rgba(168,85,247,0.4); }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden text-[11px]">
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <div class="panel p-5">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-black italic text-white tracking-tighter">V6.4.0 <span class="text-red-600 italic">SNIPER</span></h1>
+                    <div class="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Status: Monitoring MAGMA Patterns</div>
+                </div>
+                <div class="flex gap-4">
+                    <button id="fuelBtn" onclick="toggleFuel()" class="bg-zinc-900 border border-zinc-700 px-6 py-2 rounded-xl text-purple-400 font-black text-[10px] uppercase transition-all">⚓ Fuel Mode</button>
+                    <input type="text" id="search" onkeydown="handleSearch(event)" placeholder="SYMBOL & ENTER" class="bg-black border border-zinc-800 px-4 py-2 rounded-xl text-blue-400 font-black outline-none w-48 focus:border-red-600 transition-all">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-6">
+                <div class="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between font-black text-red-500"><span class="text-[10px]">🔴 SNIPER</span><span id="flash_val" class="text-white text-sm font-black">20%</span></div>
+                    <input type="range" id="flash_range" min="1" max="60" value="20" oninput="updateVal('flash', this.value)">
+                </div>
+                <div class="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between font-black text-yellow-500"><span class="text-[10px]">🟡 HUNTER SLP</span><span id="slp_val" class="text-white text-sm font-black">-2.5%</span></div>
+                    <input type="range" id="slp_range" min="-800" max="0" value="-25" oninput="updateVal('slp', this.value)">
+                </div>
+                <div class="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between font-black text-purple-500"><span class="text-[10px]">⚓ FUEL RATIO</span><span id="fuel_val" class="text-white text-sm font-black">10%</span></div>
+                    <input type="range" id="fuel_range" min="1" max="60" value="10" oninput="updateVal('fuel', this.value)">
+                </div>
+                <div class="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                    <div class="flex justify-between font-black text-blue-500"><span class="text-[10px]">💎 VAC LIMIT</span><span id="vac_val" class="text-white text-sm font-black">120</span></div>
+                    <input type="range" id="vac_range" min="10" max="500" value="120" oninput="updateVal('vac', this.value)">
+                </div>
+            </div>
+        </div>
+
+        <div id="list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-5 overflow-y-auto"></div>
+    </div>
+
+    <div class="w-80 bg-black border-l border-zinc-900 flex flex-col p-4 shadow-2xl">
+        <div class="text-zinc-600 font-black text-[10px] text-center mb-4 pb-2 border-b border-zinc-800 uppercase italic">Live Intercept Log</div>
+        <div id="logs" class="flex-1 overflow-y-auto space-y-2 pr-2"></div>
+    </div>
+
+<script>
+    const P_USER = "Gkhqyhobnxzjfwgvaiyp347m1jkhn4", P_TOKEN = "acyoe3sz15x491r1349fdcau7x6pw";
+    const EXCLUDE = ['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','BNBUSDT','BNXUSDT'];
+    const LOCK_TIME = 180000;
+    let stats = {}, pinned = new Set(), keyword = "";
+    let SETTINGS = { SLP: -0.025, FLASH: 0.20, FUEL: 0.10, VAC: 120, USE_FUEL: true };
+
+    function updateVal(key, val) {
+        if(key === 'flash') { SETTINGS.FLASH = val/100; document.getElementById('flash_val').innerText = val+'%'; }
+        if(key === 'slp') { SETTINGS.SLP = val/1000; document.getElementById('slp_val').innerText = (val/10).toFixed(1)+'%'; }
+        if(key === 'fuel') { SETTINGS.FUEL = val/100; document.getElementById('fuel_val').innerText = val+'%'; }
+        if(key === 'vac') { SETTINGS.VAC = parseInt(val); document.getElementById('vac_val').innerText = val; }
+    }
+
+    async function push(t, m) { fetch('https://api.pushover.net/1/messages.json',{method:'POST',body:new URLSearchParams({token:P_TOKEN,user:P_USER,title:t,message:m})}); }
+    function addLog(m, c="text-zinc-500") { 
+        const l=document.getElementById('logs'), d=document.createElement('div'); 
+        d.className=`pl-3 border-l-2 border-zinc-800 py-2 ${c} font-bold text-[10px] bg-zinc-900/20 rounded-r`; 
+        d.innerText=`[${new Date().toLocaleTimeString('zh-TW',{hour12:false})}] ${m}`; 
+        l.prepend(d);
+        if(l.children.length > 50) l.lastChild.remove();
+    }
+    
+    function handleSearch(e) { if(e.key==='Enter') keyword = e.target.value.toUpperCase(); }
+    function toggleFuel() { SETTINGS.USE_FUEL=!SETTINGS.USE_FUEL; document.getElementById('fuelBtn').classList.toggle('active-fuel'); }
+
+    async function update() {
+        try {
+            const [fRes, tRes] = await Promise.all([fetch('https://fapi.binance.com/fapi/v1/premiumIndex'), fetch('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
+            const fData = await fRes.json(), tData = await tRes.json();
+            const tMap = new Map(tData.map(t=>[t.symbol, t]));
+            let results = [];
+
+            fData.forEach(c => {
+                const s = c.symbol; if(!s.endsWith('USDT') || (EXCLUDE.includes(s) && !s.includes(keyword))) return;
+                const ticker = tMap.get(s); if(!ticker) return;
+
+                const pNow = parseFloat(ticker.lastPrice), fNow = parseFloat(c.lastFundingRate);
+                const vNow = parseFloat(ticker.quoteVolume), wap = parseFloat(ticker.weightedAvgPrice);
+                
+                if(!stats[s]) stats[s]={ lastV:vNow, vDeltas:[], pHist:[], lastS:0, lastH:0, lastFR:fNow };
+                
+                const vDelta = Math.max(0, vNow - stats[s].lastV); 
+                stats[s].lastV = vNow;
+                stats[s].vDeltas.push(vDelta); if(stats[s].vDeltas.length > 300) stats[s].vDeltas.shift();
+                stats[s].pHist.push(pNow); if(stats[s].pHist.length > 50) stats[s].pHist.shift();
+                
+                const ma7 = stats[s].pHist.slice(-7).reduce((a,b)=>a+b,0) / 7;
+                const ma25 = stats[s].pHist.slice(-25).reduce((a,b)=>a+b,0) / 25 || pNow;
+                const vMax15m = Math.max(...stats[s].vDeltas.slice(0, -1)) || 1;
+                const vSum15m = stats[s].vDeltas.reduce((a,b)=>a+b,0) || 1;
+                const vSum30s = stats[s].vDeltas.slice(-10).reduce((a,b)=>a+b,0);
+                const flash = (pNow - stats[s].pHist[0]) / (parseFloat(ticker.highPrice) - parseFloat(ticker.lowPrice) || 0.001);
+                const distWap = (pNow - wap) / wap;
+
+                // 🔴 紅卡全吻合邏輯：MAGMA 模式
+                const isSNow = (vDelta > vMax15m * 1.1) && (vSum30s > vSum15m * 0.1) && (flash >= SETTINGS.FLASH) && (pNow > ma7) && (distWap > 0.003);
+                const isHNow = (vDelta > (vSum15m/300)*2) && (flash >= 0.15) && (pNow > wap);
+
+                if(isSNow) { 
+                    if(Date.now()-stats[s].lastS > 300000) { addLog(`🔴 SNIPER TRIGGER: ${s}`, "text-red-500"); push(`🔴 SNIPER: ${s}`, `GAP:${(distWap*100).toFixed(2)}%`); }
+                    stats[s].lastS = Date.now(); 
+                }
+                if(isHNow && !isSNow) stats[s].lastH = Date.now();
+
+                const isS = (Date.now() - stats[s].lastS) < LOCK_TIME, isH = (Date.now() - stats[s].lastH) < LOCK_TIME;
+                const isF = SETTINGS.USE_FUEL && (fNow < SETTINGS.SLP) && (Math.abs(distWap) < 0.03);
+
+                if(isS || isH || isF || pinned.has(s) || (keyword && s.includes(keyword))) {
+                    results.push({ s, pNow, wap, ma7, ma25, distWap, isS, isH, isF, isSNow, isHNow, sAge:Date.now()-stats[s].lastS, hAge:Date.now()-stats[s].lastH });
+                }
+            });
+            results.sort((a,b) => (b.isS - a.isS) || (b.isH - a.isH) || (b.distWap - a.distWap));
+            render(results);
+        } catch(e) {}
+    }
+
+    function render(data) {
+        const l = document.getElementById('list'); l.innerHTML = '';
+        data.forEach((item, idx) => {
+            let cls = "card-idle", label = "TRACKING", age = 0;
+            if(item.isS) { cls = "sniper-trigger"; label = "🔴 SNIPER"; age = item.sAge; if(!item.isSNow) cls += " fading"; }
+            else if(item.isH) { cls = "hunter-trigger"; label = "🟡 HUNTER"; age = item.hAge; if(!item.isHNow) cls += " fading"; }
+            else if(item.isF) { cls = "fuel-trigger"; label = "⚓ FUEL"; }
+
+            const div = document.createElement('div');
+            div.className = `card p-5 rounded-2xl ${cls}`;
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="text-white font-black text-xl italic leading-none tracking-tighter">${item.s.replace('USDT','')}</div>
+                        <div class="text-[10px] font-bold mt-2 ${item.distWap>0?'text-green-500':'text-red-500'} uppercase tracking-widest">GAP: ${(item.distWap*100).toFixed(2)}%</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-white font-black text-lg leading-none">$${item.pNow.toFixed(item.pNow<1?5:2)}</div>
+                        <div class="text-[9px] text-zinc-500 font-bold mt-1">WAP: ${item.wap.toFixed(item.wap<1?4:2)}</div>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-between text-[8px] font-black text-zinc-500 border-t border-white/5 pt-3 uppercase">
+                    <span>MA7: ${item.ma7.toFixed(item.pNow<1?4:2)}</span>
+                    <span>MA25: ${item.ma25.toFixed(item.pNow<1?4:2)}</span>
+                </div>
+                <div class="mt-3 flex justify-between items-center text-[8px] font-black">
+                    <span class="text-zinc-600">#${idx+1} RANK</span>
+                    <span class="text-zinc-400 italic">${label} ${age > 0 ? (Math.ceil((LOCK_TIME-age)/1000)+'s') : ''}</span>
+                </div>
+            `;
+            l.appendChild(div);
+        });
+    }
+    setInterval(update, 3000);
+    // 初始化燃料按鈕狀態
+    if(SETTINGS.USE_FUEL) document.getElementById('fuelBtn').classList.add('active-fuel');
+</script>
+</body>
+</html>
